@@ -6,33 +6,56 @@
  */
 
 #include "mtcp.h"
-#include "netsim.h"
 
-#include <arpa/inet.h>
-#include <errno.h>
-#include <netinet/in.h>
-#include <poll.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
-#include <time.h>
+#include <sys/types.h>
 #include <unistd.h>
 
-struct mtcp_listener {
-    int fd;
-    /* TODO */
-};
+static struct sockaddr_in get_listener_addr(uint16_t port) {
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof addr);
+    
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons(port);
 
-struct mtcp_conn {
-    int fd;
-    /* TODO: adresa protistrany, čísla sekvence, buffer přijatých dat, ... */
-};
+    return addr;
+}
+
+static bool create_listener_socket(mtcp_listener *l) {
+    l->fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (l->fd < 0) {
+        free(l);
+        return false;
+    }
+    return true;
+}
+
+static bool bind_listener(mtcp_listener *l, uint16_t port) {
+    struct sockaddr_in addr = get_listener_addr(port);
+    
+    if (bind(l->fd, (struct sockaddr*) &addr,sizeof addr) < 0) {
+        close(l->fd);
+        free(l);
+        return false;
+    }
+    return true;
+}
 
 mtcp_listener *mtcp_listen(uint16_t port)
 {
-    (void)port;
-    /* TODO: socket(AF_INET, SOCK_DGRAM, 0), SO_REUSEADDR, bind */
-    return NULL;
+    mtcp_listener *listener = malloc(sizeof (struct mtcp_listener));
+    if (listener == NULL) { perror("Malloc error."); return NULL; }
+
+    if (!create_listener_socket(listener)) { perror("Socket error."); return NULL; }
+    if (!bind_listener(listener, port)) { perror("Bind error."); return NULL; }
+
+    return listener;
 }
 
 mtcp_conn *mtcp_accept(mtcp_listener *l)
